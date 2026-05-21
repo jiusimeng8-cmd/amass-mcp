@@ -3,14 +3,12 @@ import { z } from "zod";
 
 const handler = createMcpHandler(
   async (server) => {
-    server.registerTool(
+    server.tool(
       "do-nmap",
+      "Run nmap network scanner with specified target. Returns the command to run locally since CLI tools cannot execute on serverless.",
       {
-        title: "do-nmap",
-        description: "Run nmap network scanner with specified target. Returns the command to run locally since CLI tools cannot execute on serverless.",
-        inputSchema: z.object({
-          target: z.string().describe("Target IP address or hostname to scan for open ports"),
-          nmap_args: z.array(z.string()).optional().describe(`Additional nmap arguments. Common options:
+        target: z.string().describe("Target IP address or hostname to scan for open ports"),
+        nmap_args: z.array(z.string()).optional().describe(`Additional nmap arguments. Common options:
   HOST DISCOVERY:
     -sn: Ping Scan - disable port scan
     -Pn: Treat all hosts as online -- skip host discovery
@@ -35,7 +33,6 @@ const handler = createMcpHandler(
     -v: Increase verbosity level
     --reason: Display the reason a port is in a particular state
     --open: Only show open (or possibly open) ports`)
-        }),
       },
       async ({ target, nmap_args }) => {
         // Build the nmap command - spawn() does NOT work on Vercel serverless!
@@ -74,7 +71,15 @@ Common examples:
       }
     );
   },
-  {},
+  {
+    capabilities: {
+      tools: {
+        "do-nmap": {
+          description: "Run nmap network scanner with specified target. Returns the command to run locally since CLI tools cannot execute on serverless."
+        }
+      }
+    }
+  },
   {
     basePath: "",
     verboseLogs: true,
