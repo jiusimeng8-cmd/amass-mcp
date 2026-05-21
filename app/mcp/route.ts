@@ -3,106 +3,78 @@ import { z } from "zod";
 
 const handler = createMcpHandler(
   async (server) => {
-    server.tool(
-      "amass",
-      "Advanced subdomain enumeration and reconnaissance tool. Returns the command to run locally since CLI tools cannot execute on serverless.",
+    server.registerTool(
+      "do-nmap",
       {
-        subcommand: z.enum(["enum", "intel"]).describe(`Specify the Amass operation mode:
-            - intel: Gather intelligence about target domains from various sources
-            - enum: Perform subdomain enumeration and network mapping`),
-        domain: z.string().optional().describe("Target domain to perform reconnaissance against (e.g., example.com)"),
-        intel_whois: z.boolean().optional().describe("Whether to include WHOIS data in intelligence gathering (true/false)"),
-        intel_organization: z.string().optional().describe("Organization name to search for during intelligence gathering (e.g., 'Example Corp')"),
-        enum_type: z.enum(["active", "passive"]).optional().describe(`Enumeration approach type:
-            - active: Includes DNS resolution and potential network interactions with target
-            - passive: Only uses information from third-party sources without direct target interaction`),
-        enum_brute: z.boolean().optional().describe("Whether to perform brute force subdomain discovery (true/false)"),
-        enum_brute_wordlist: z.string().optional().describe("Path to custom wordlist file for brute force operations (e.g., '/path/to/wordlist.txt')")
+        title: "do-nmap",
+        description: "Run nmap network scanner with specified target. Returns the command to run locally since CLI tools cannot execute on serverless.",
+        inputSchema: z.object({
+          target: z.string().describe("Target IP address or hostname to scan for open ports"),
+          nmap_args: z.array(z.string()).optional().describe(`Additional nmap arguments. Common options:
+  HOST DISCOVERY:
+    -sn: Ping Scan - disable port scan
+    -Pn: Treat all hosts as online -- skip host discovery
+  SCAN TECHNIQUES:
+    -sS: TCP SYN scan (default)
+    -sT: TCP Connect scan
+    -sU: UDP Scan
+    -sA: TCP ACK scan
+  PORT SPECIFICATION:
+    -p <port ranges>: Only scan specified ports (e.g., -p22, -p1-65535, -p80,443)
+    -F: Fast mode - Scan fewer ports
+    --top-ports <number>: Scan most common ports
+  SERVICE/VERSION DETECTION:
+    -sV: Probe open ports to determine service/version info
+    -sC: equivalent to --script=default
+  OS DETECTION:
+    -O: Enable OS detection
+    -A: Enable OS detection, version detection, script scanning, and traceroute
+  TIMING:
+    -T<0-5>: Set timing template (higher is faster)
+  OUTPUT:
+    -v: Increase verbosity level
+    --reason: Display the reason a port is in a particular state
+    --open: Only show open (or possibly open) ports`)
+        }),
       },
-      async ({ subcommand, domain, intel_whois, intel_organization, enum_type, enum_brute, enum_brute_wordlist }) => {
-        const amassArgs: string[] = [subcommand];
-
-        // Handle different subcommands
-        if (subcommand === "enum") {
-          if (!domain) {
-            return {
-              content: [{
-                type: "text",
-                text: "Error: Domain parameter is required for 'enum' subcommand"
-              }]
-            };
-          }
-
-          amassArgs.push("-d", domain);
-
-          // Handle enum type
-          if (enum_type === "passive") {
-            amassArgs.push("-passive");
-          }
-
-          // Handle brute force options
-          if (enum_brute === true) {
-            amassArgs.push("-brute");
-
-            // Add custom wordlist if provided
-            if (enum_brute_wordlist) {
-              amassArgs.push("-w", enum_brute_wordlist);
-            }
-          }
-        } else if (subcommand === "intel") {
-          if (!domain && !intel_organization) {
-            return {
-              content: [{
-                type: "text",
-                text: "Error: Either domain or organization parameter is required for 'intel' subcommand"
-              }]
-            };
-          }
-
-          // Add domain if provided
-          if (domain) {
-            amassArgs.push("-d", domain);
-            // Add whois option if enabled
-            if (intel_whois !== true) {
-              return {
-                content: [{
-                  type: "text",
-                  text: "Error: For domain parameter, whois is required"
-                }]
-              };
-            }
-          }
-
-          // Add organization if provided
-          if (intel_organization) {
-            amassArgs.push("-org", `'${intel_organization}'`);
-          }
-          
-          if (intel_whois === true) {
-            amassArgs.push("-whois");
-          }
+      async ({ target, nmap_args }) => {
+        // Build the nmap command - spawn() does NOT work on Vercel serverless!
+        const args: string[] = [];
+        
+        // Add optional nmap arguments
+        if (nmap_args && nmap_args.length > 0) {
+          args.push(...nmap_args);
         }
-
-        const command = `amass ${amassArgs.join(" ")}`;
-
+        
+        // Add target at the end
+        args.push(target);
+        
+        const command = `nmap ${args.join(" ")}`;
+        
         return {
           content: [{
             type: "text",
-            text: `To run Amass locally, execute:\n\n${command}\n\nThis MCP server provides the interface. Run the command on your local machine where Amass is installed.\n\nAmass is an advanced subdomain enumeration and reconnaissance tool. Install it from: https://github.com/owasp-amass/amass`
+            text: `To run nmap locally, execute:
+
+${command}
+
+This MCP server provides the interface. Run the command on your local machine where nmap is installed.
+
+Nmap (Network Mapper) is a free and open source utility for network discovery and security auditing. 
+Install it from: https://nmap.org/download.html
+
+Common examples:
+  nmap -sS -sV ${target}           # SYN scan with version detection
+  nmap -p- ${target}                # Scan all 65535 ports
+  nmap -A ${target}                 # Aggressive scan (OS, version, scripts, traceroute)
+  nmap -sU -F ${target}             # Fast UDP scan
+  nmap --top-ports 100 ${target}    # Scan top 100 ports`
           }]
         };
       }
     );
   },
-  {
-    capabilities: {
-      tools: {
-        amass: {
-          description: "Advanced subdomain enumeration and reconnaissance tool"
-        }
-      }
-    }
-  },
+  {},
   {
     basePath: "",
     verboseLogs: true,
